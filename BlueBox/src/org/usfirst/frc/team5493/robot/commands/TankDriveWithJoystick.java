@@ -4,23 +4,28 @@
  */
 package org.usfirst.frc.team5493.robot.commands;
 
-import edu.wpi.first.wpilibj.command.Command;
-
 import org.usfirst.frc.team5493.robot.Robot;
+import org.usfirst.frc.team5493.robot.subsystems.IDriveBaseSubsystem;
+
+import edu.wpi.first.wpilibj.command.Command;
+import edu.wpi.first.wpilibj.command.Subsystem;
 
 /**
  * Have the robot drive tank style using the PS3 Joystick until interrupted.
  */
 public class TankDriveWithJoystick extends Command {
 
-	public TankDriveWithJoystick() {
-		requires(Robot.drivetrain);
+	IDriveBaseSubsystem driveBase;
+	
+	public TankDriveWithJoystick(IDriveBaseSubsystem driveBase) {
+		this.driveBase = driveBase;
+		requires((Subsystem) driveBase);
 	}
 
 	// Called repeatedly when this Command is scheduled to run
 	@Override
 	protected void execute() {
-		Robot.drivetrain.drive(Robot.oi.getDriveJoystick());
+		this.driveBase.drive(Robot.oi.getDriveJoystick());
 	}
 
 	// Make this return true when this Command no longer needs to run execute()
@@ -32,6 +37,6 @@ public class TankDriveWithJoystick extends Command {
 	// Called once after isFinished returns true
 	@Override
 	protected void end() {
-		Robot.drivetrain.drive(0, 0);
+		this.driveBase.tankDrive(0, 0);
 	}
 }
