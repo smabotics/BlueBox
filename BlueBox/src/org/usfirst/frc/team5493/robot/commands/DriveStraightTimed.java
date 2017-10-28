@@ -14,16 +14,18 @@ import edu.wpi.first.wpilibj.command.TimedCommand;
 public class DriveStraightTimed extends TimedCommand {
 
 	private double driveValueRamping = 0.2;
-	private double maxDriveValue = 0.3;
+	private double maxDriveValue = 0.6;
 	private double rampBy = 0.012;
 	private double timeout;
 	private IDriveBaseSubsystem driveBase;
+	
+	private double distanceToSetPoint = 96;
 
 	private double lastReadAt = 0;
 
 	private double readEverySeconds = 0;
 
-	private double driveEncoderInitial = .5;
+	private double driveEncoderInitial = .1;
 
 	private double driveEncoderLeft = driveEncoderInitial;
 	private double driveEncoderRight = driveEncoderInitial;
@@ -40,6 +42,13 @@ public class DriveStraightTimed extends TimedCommand {
 	// Called just before this Command runs the first time
 	protected void initialize() {
 		this.driveBase.resetEncoders();
+	}
+	
+	public void start() {
+		this.driveBase.resetEncoders();
+		this.driveBase.tankDrive(0, 0);
+		
+		super.start();
 	}
 
 	// Called repeatedly when this Command is scheduled to run
@@ -59,10 +68,10 @@ public class DriveStraightTimed extends TimedCommand {
 
 	private void driveUsingEncoderTargetedSpeed() {
 
-		EncoderAdjustment adjustBy = driveBase.determineAdjusments();
+		EncoderAdjustment adjustBy = driveBase.determineAdjusments(distanceToSetPoint);
 
 		if (readEverySeconds == 0) {
-			readEverySeconds = timeout * .05;
+			readEverySeconds = timeout * .08;
 		}
 
 		double timeSince = timeSinceInitialized();
@@ -81,11 +90,21 @@ public class DriveStraightTimed extends TimedCommand {
 				driveEncoderRight = driveEncoderRight < 0 ? 0 : driveEncoderRight;
 
 			}
+			else if (adjustBy.sideToAdjust == EncoderAdjustment.SIDE_BOTH) {
+				double motorSpeed  = adjustBy.adjustment;
+
+				motorSpeed = motorSpeed > maxDriveValue ? maxDriveValue : motorSpeed;
+				
+				driveEncoderRight = motorSpeed;
+				driveEncoderLeft = motorSpeed;
+
+			}
+
+			DriverStation.getInstance().reportError("Left: " + driveEncoderLeft + " Right: " + driveEncoderRight, false);
 
 			lastReadAt = timeSince;
 		}
 
-		DriverStation.getInstance().reportError("Left: " + driveEncoderLeft + " Right: " + driveEncoderRight, false);
 
 		driveBase.tankDrive(driveEncoderLeft, driveEncoderRight);
 	}

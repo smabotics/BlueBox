@@ -11,9 +11,11 @@ import com.ctre.CANTalon.TalonControlMode;
 
 import edu.wpi.first.wpilibj.AnalogGyro;
 import edu.wpi.first.wpilibj.DriverStation;
+import edu.wpi.first.wpilibj.Encoder;
 import edu.wpi.first.wpilibj.RobotDrive;
 import edu.wpi.first.wpilibj.SpeedController;
 import edu.wpi.first.wpilibj.Timer;
+import edu.wpi.first.wpilibj.VictorSP;
 import edu.wpi.first.wpilibj.command.Subsystem;
 import edu.wpi.first.wpilibj.interfaces.Gyro;
 import edu.wpi.first.wpilibj.livewindow.LiveWindow;
@@ -22,23 +24,33 @@ import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 /**
  *
  */
-public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveBaseArcadeSubsystem {
+public class DriveBase extends Subsystem implements IDriveBaseSubsystem {//, IDriveBaseArcadeSubsystem {
 
 	// Put methods for controlling this subsystem
 	// here. Call these from Commands.
 
-	private SpeedController motorLeft = new CANTalon(RobotMap.portMotorDriveLeft);
-	private SpeedController motorRight = new CANTalon(RobotMap.portMotorDriveRight);
+	// private SpeedController motorLeft = new
+	// CANTalon(RobotMap.portMotorDriveLeft);
+	// private SpeedController motorRight = new
+	// CANTalon(RobotMap.portMotorDriveRight);
+	private SpeedController motorFrontLeft = new VictorSP(RobotMap.portMotorDriveLeftFront);
+	private SpeedController motorFrontRight = new VictorSP(RobotMap.portMotorDriveRightFront);
+	private SpeedController motorRearLeft = new VictorSP(RobotMap.portMotorDriveLeftBack);
+	private SpeedController motorRearRight = new VictorSP(RobotMap.portMotorDriveRightBack);
 
 	private Gyro gyro = new AnalogGyro(RobotMap.channelGyroMain);
 
 	private final int IDX_SPEEDCONTROLLER_LEFT = 0;
 	private final int IDX_SPEEDCONTROLLER_RIGHT = 1;
-	private final int TOTAL_MOTORS = 2;
+	private final int IDX_SPEEDCONTROLLER_LEFT_REAR = 2;
+	private final int IDX_SPEEDCONTROLLER_RIGHT_REAR = 3;
+	private final int TOTAL_MOTORS = 4;
+	private final double NOMINAL_SETPOINT_ADJUSTMENT = 0.0;
 
-	private SpeedController[] speedControllers = new SpeedController[2];
+	private SpeedController[] speedControllers = new SpeedController[TOTAL_MOTORS];
 
-	private RobotDrive robotDrive = new RobotDrive(motorLeft, motorRight);
+	private RobotDrive robotDrive = new RobotDrive(this.motorFrontLeft, this.motorRearLeft, this.motorFrontRight,
+			this.motorRearRight);
 
 	// private AnalogInput rangefinder = new AnalogInput(6);
 	// private AnalogGyro gyro = new AnalogGyro(1);
@@ -59,6 +71,9 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	private static int izone = 100;
 	private static final double ramprate = 36;
 	private static final int profile = 0;
+
+	private Encoder encoderLeft = new Encoder(RobotMap.L_Encoder_A, RobotMap.L_Encoder_B);
+	private Encoder encoderRight = new Encoder(RobotMap.R_Encoder_A, RobotMap.R_Encoder_B);
 
 	/*
 	 * 
@@ -101,6 +116,8 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	private static final double MAX_INTEGRAL_ERROR = 1;
 	private double integral = 0.0D;
 	private double pasterr;
+	private static final double wheelDiameter = 4;
+	private static final int pulsesPerRevolution = 1440;
 
 	// https://www.reddit.com/r/FRC/comments/3zcc2d/timer_not_working/?st=j6l3jsp4&sh=83f36f3a
 	private Timer outputTimer = new Timer();
@@ -108,21 +125,31 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	public DriveBase() {
 		super();
 
-		speedControllers[IDX_SPEEDCONTROLLER_LEFT] = motorLeft;
-		speedControllers[IDX_SPEEDCONTROLLER_RIGHT] = motorRight;
+		speedControllers[IDX_SPEEDCONTROLLER_LEFT] = this.motorFrontLeft;
+		speedControllers[IDX_SPEEDCONTROLLER_RIGHT] = this.motorFrontRight;
+
+		speedControllers[IDX_SPEEDCONTROLLER_LEFT_REAR] = this.motorRearLeft;
+		speedControllers[IDX_SPEEDCONTROLLER_RIGHT_REAR] = this.motorRearRight;
 
 		gyro.calibrate();
-		
+
 		outputTimer.reset();
 		outputTimer.start();
 
+		double distancePerPulse = (wheelDiameter * Math.PI) / pulsesPerRevolution;
+
+		encoderLeft.setDistancePerPulse(distancePerPulse);
+		encoderRight.setDistancePerPulse(distancePerPulse);
+
 		// Let's show everything on the LiveWindow
-		LiveWindow.addActuator("Drive Train", "Left Motor", (CANTalon) motorLeft);
-		LiveWindow.addActuator("Drive Train", "Right Motor", (CANTalon) motorRight);
+		LiveWindow.addActuator("Drive Train", "Left Front Motor", (VictorSP) this.motorFrontLeft);
+		LiveWindow.addActuator("Drive Train", "Right Front Motor", (VictorSP) this.motorFrontRight);
+		LiveWindow.addActuator("Drive Train", "Left Rear Motor", (VictorSP) this.motorRearLeft);
+		LiveWindow.addActuator("Drive Train", "Right Rear Motor", (VictorSP) this.motorRearRight);
 		// LiveWindow.addSensor("Drive Train", "Rangefinder", rangefinder);
 		// LiveWindow.addSensor("Drive Train", "Gyro", gyro);
 	}
-	
+
 	private void initTalonsForMagClosed() {
 		for (int idx = 0; idx < TOTAL_MOTORS; idx++) {
 
@@ -147,49 +174,51 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	 */
 	public void log() {
 
-		if (this.outputEveryXTime && outputTimer.get() > this.outputEveryXTimeValue) {
-			outputTimer.reset();
-			for (int idx = 0; idx < TOTAL_MOTORS; idx++) {
-
-				CANTalon talon = (CANTalon) speedControllers[idx];
-
-				// double currentAmps = talon.getOutputCurrent();
-				// double outputVolt = talon.getOutputVoltage();
-				// double busVolt = talon.getBusVoltage();
-				// double quadEncoderPos = talon.getEncPosition();
-				// double quadEncoderVelocity = talon.getEncVelocity();
-				// double selectedSensorPos = talon.getPosition();
-				// double selectedSensorSpeed = talon.getSpeed();
-				// int analogPos = talon.getAnalogInPosition();
-				// int analogVelocity = talon.getAnalogInPosition();
-				// int closeLoopError = talon.getClosedLoopError();
-
-				String contrl = idx == IDX_SPEEDCONTROLLER_LEFT ? "Left " : "Right ";
-
-				SmartDashboard.putNumber(contrl + "Quad Position", talon.getEncPosition());
-				SmartDashboard.putNumber(contrl + "Quad Speed", talon.getEncVelocity());
-
-				// DriverStation.reportWarning(contrl + "currentAmps=" + currentAmps, false);
-				// DriverStation.reportWarning(contrl + "outputVolt=" + outputVolt, false);
-				// DriverStation.reportWarning(contrl + "busVolt=" + busVolt, false);
-				// DriverStation.reportWarning(contrl + "quadEncoderPos=" + quadEncoderPos,
-				// false);
-				// DriverStation.reportWarning(contrl + "quadEncoderVelocity=" +
-				// quadEncoderVelocity, false);
-				// DriverStation.reportWarning(contrl + "selectedSensorPos=" +
-				// selectedSensorPos, false);
-				// DriverStation.reportWarning(contrl + "selectedSensorSpeed=" +
-				// selectedSensorSpeed, false);
-				// DriverStation.reportWarning(contrl + "analogPos=" + analogPos, false);
-				// DriverStation.reportWarning(contrl + "analogVelocity=" + analogVelocity,
-				// false);
-				// DriverStation.reportWarning(contrl + "analogVelocity=" + analogVelocity,
-				// false);
-				// DriverStation.reportWarning(contrl + "closeLoopError=" + closeLoopError,
-				// false);
-			}
-			outputTimer.start();
-		}
+//		if (this.outputEveryXTime && outputTimer.get() > this.outputEveryXTimeValue) {
+//			outputTimer.reset();
+//			for (int idx = 0; idx < TOTAL_MOTORS; idx++) {
+//
+////				CANTalon talon = (CANTalon) speedControllers[idx];
+//				
+//				VictorSP victor = (VictorSP) speedControllers[idx];
+//
+//				// double currentAmps = talon.getOutputCurrent();
+//				// double outputVolt = talon.getOutputVoltage();
+//				// double busVolt = talon.getBusVoltage();
+//				// double quadEncoderPos = talon.getEncPosition();
+//				// double quadEncoderVelocity = talon.getEncVelocity();
+//				// double selectedSensorPos = talon.getPosition();
+//				// double selectedSensorSpeed = talon.getSpeed();
+//				// int analogPos = talon.getAnalogInPosition();
+//				// int analogVelocity = talon.getAnalogInPosition();
+//				// int closeLoopError = talon.getClosedLoopError();
+//
+//				String contrl = idx == IDX_SPEEDCONTROLLER_LEFT ? "Left " : "Right ";
+//
+//				SmartDashboard.putNumber(contrl + "Quad Position", talon.getEncPosition());
+//				SmartDashboard.putNumber(contrl + "Quad Speed", talon.getEncVelocity());
+//
+//				// DriverStation.reportWarning(contrl + "currentAmps=" + currentAmps, false);
+//				// DriverStation.reportWarning(contrl + "outputVolt=" + outputVolt, false);
+//				// DriverStation.reportWarning(contrl + "busVolt=" + busVolt, false);
+//				// DriverStation.reportWarning(contrl + "quadEncoderPos=" + quadEncoderPos,
+//				// false);
+//				// DriverStation.reportWarning(contrl + "quadEncoderVelocity=" +
+//				// quadEncoderVelocity, false);
+//				// DriverStation.reportWarning(contrl + "selectedSensorPos=" +
+//				// selectedSensorPos, false);
+//				// DriverStation.reportWarning(contrl + "selectedSensorSpeed=" +
+//				// selectedSensorSpeed, false);
+//				// DriverStation.reportWarning(contrl + "analogPos=" + analogPos, false);
+//				// DriverStation.reportWarning(contrl + "analogVelocity=" + analogVelocity,
+//				// false);
+//				// DriverStation.reportWarning(contrl + "analogVelocity=" + analogVelocity,
+//				// false);
+//				// DriverStation.reportWarning(contrl + "closeLoopError=" + closeLoopError,
+//				// false);
+//			}
+//			outputTimer.start();
+//		}
 
 		//
 		//
@@ -291,31 +320,29 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 
 	@Override
 	public boolean doesSupportEncoder() {
-		
+
 		return true;
 	}
 
 	@Override
-	public EncoderAdjustment determineAdjusments() {
-
-		CANTalon talonLeft = (CANTalon) speedControllers[IDX_SPEEDCONTROLLER_LEFT];
-		CANTalon talonRight = (CANTalon) speedControllers[IDX_SPEEDCONTROLLER_RIGHT];
+	public EncoderAdjustment determineAdjusments(double distanceToSetpoint) {
 
 		double adjustment = 0;
 
-		int left = Math.abs(talonLeft.getEncPosition());
-		int right = Math.abs(talonRight.getEncPosition());
+		// compared to the setpoint with factor less than one to apply to output.
 
-		double delta = Math.abs(left - right) / .01;
+		double left = Math.abs(encoderLeft.getDistance());
+		double right = Math.abs(encoderRight.getDistance());
 
-		// TODO: MAybe this needs to be proportional (i.e. PID)?
-		if (left > right) {
-			adjustment = delta;
-		} else if (left < right) {
-			adjustment = -delta;
+		double averageDistance = (left + right) / 2;
+
+		double distanceAdjustment = ((distanceToSetpoint - averageDistance ) *.6) / distanceToSetpoint + NOMINAL_SETPOINT_ADJUSTMENT;
+
+		if (distanceAdjustment < 0) {
+			distanceAdjustment = 0;
 		}
 
-		return new EncoderAdjustment(EncoderAdjustment.SIDE_RIGHT, adjustment);
+		return new EncoderAdjustment(EncoderAdjustment.SIDE_BOTH, distanceAdjustment);
 	}
 
 	public double motorPID(double encoderval, double desiredval) {
@@ -334,11 +361,16 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	@Override
 	public void resetEncoders() {
 
-		CANTalon talonLeft = (CANTalon) speedControllers[IDX_SPEEDCONTROLLER_LEFT];
-		CANTalon talonRight = (CANTalon) speedControllers[IDX_SPEEDCONTROLLER_RIGHT];
+		// VictorSP frontLeft = (VictorSP) speedControllers[IDX_SPEEDCONTROLLER_LEFT];
+		// VictorSP frontRight = (VictorSP) speedControllers[IDX_SPEEDCONTROLLER_RIGHT];
+		// VictorSP rearLeft = (VictorSP)
+		// speedControllers[IDX_SPEEDCONTROLLER_LEFT_REAR];
+		// VictorSP rearRight = (VictorSP)
+		// speedControllers[IDX_SPEEDCONTROLLER_RIGHT_REAR];
 
-		talonLeft.setEncPosition(0);
-		talonRight.setEncPosition(0);
+		encoderRight.reset();
+		encoderLeft.reset();
+
 	}
 
 	public void driveArcade(double moveValue) {
@@ -348,7 +380,7 @@ public class DriveBase extends Subsystem implements IDriveBaseSubsystem, IDriveB
 	public void driveArcade(double moveValue, boolean squaredInputs) {
 
 		double rotateValue = gyro.getAngle();
-		
+
 		rotateValue = rotateValue * gryoKP;
 
 		driveArcade(moveValue, rotateValue, squaredInputs);

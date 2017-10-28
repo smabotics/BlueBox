@@ -21,8 +21,18 @@ public class RobotMap {
 	
 	
 	public static final int PORT_JOYSTICK_DRIVE = 0;
-	public static final int  portMotorDriveLeft = 0;
-	public static final int  portMotorDriveRight = 1;
+//	public static final int  portMotorDriveLeft = 0;
+//	public static final int  portMotorDriveRight = 1;
+	public static final int  portMotorDriveLeftFront = 7;
+	public static final int  portMotorDriveRightFront = 2;
+	public static final int  portMotorDriveLeftBack = 8;
+	public static final int  portMotorDriveRightBack = 1;
 	public static final int channelGyroMain = 1;
+	
+	public static final int R_Encoder_A = 2,
+			R_Encoder_B = 1,
+			L_Encoder_A = 8,
+			L_Encoder_B = 7;
+	
 	
 }

@@ -11,7 +11,7 @@ public interface IDriveBaseSubsystem {
     
     public boolean doesSupportEncoder();
     
-    public EncoderAdjustment determineAdjusments();
+    public EncoderAdjustment determineAdjusments(double distanceToSetpoint);
     
     public void resetEncoders();
 
